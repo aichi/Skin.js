@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+	<meta http-equiv="X-UA-Compatible" content="IE=7; IE=EmulateIE9" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 100%; margin: 0; padding: 0 }
+      #map_canvas { height: 100% }
+    </style>
+    <script type="text/javascript" src="http://api.maps.nokia.com/2.2.3/jsl.js?with=maps,places,directions,positioning"></script>
+	<script type="text/javascript" src="lib/base.js"></script>
+	<script type="text/javascript" src="lib/event.js"></script>
+	<script type="text/javascript" src="lib/LatLng.js"></script>
+	<script type="text/javascript" src="lib/LatLngBounds.js"></script>
+	<script type="text/javascript" src="lib/Point.js"></script>
+	<script type="text/javascript" src="lib/MapTypeId.js"></script>
+	<script type="text/javascript" src="lib/MVCObject.js"></script>
+	<script type="text/javascript" src="lib/Map.js"></script>
+	<script type="text/javascript">
+		// Set up is the credentials to use the API:
+		nokia.Settings.set("appId", "_peU-uCkp-j8ovkzFGNU");
+		nokia.Settings.set("authenticationToken", "gBoUkAMoxoqIWfxWA5DuMQ");
+	</script>
+
+    <script type="text/javascript">
+	  var map;
+      function initialize() {
+        var mapOptions = {
+          center: new google.maps.LatLng(-34.397, 150.644),
+          zoom: 8,
+          mapTypeId: google.maps.MapTypeId.ROADMAP,
+		  overviewMapControl: true
+		};
+        map = new google.maps.Map(document.getElementById("map_canvas"),
+            mapOptions);
+      }
+    </script>
+  </head>
+  <body onload="initialize()">
+    <div id="map_canvas" style="width:100%; height:100%"></div>
+  </body>
+</html>
