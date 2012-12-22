@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Geocode</title>
+	</head>
+    <body>
+		<div id="gmap" style="width:400px;height:240px;"></div>
+
+		<script type="text/javascript">
+		function initialize() {
+			var options = {
+				zoom: 13,
+				mapTypeId: google.maps.MapTypeId.ROADMAP,
+				mapTypeControl: false,
+				streetViewControl: false
+			}
+
+			console.log("B")
+			var canvas = document.getElementById('gmap');
+			var map = new google.maps.Map(canvas, options);
+
+				var geocoder = new google.maps.Geocoder();
+				geocoder.geocode({'address': "D\u011blnick\u00e1 12, Praha 7"}, function(results, status) {
+					if (status === google.maps.GeocoderStatus.OK) {
+						console.log(results)
+						map.setCenter(results[0].geometry.location);
+						var marker = new google.maps.Marker({
+							map: map,
+							position: results[0].geometry.location
+						});
+					} else {
+						canvas.style.display = 'none';
+					}
+				});
+		}
+
+		function loadScript() {
+			var script = document.createElement("script");
+			script.type = "text/javascript";
+			script.src = "http://maps.googleapis.com/maps/api/js?key=AIzaSyATvyn59K_L_aObTq5DpbKJ8puTTo54HSM&sensor=false&callback=initialize";
+			document.body.appendChild(script);
+		}
+
+		window.onload = loadScript;
+		</script>
+    </body>
+</html>
