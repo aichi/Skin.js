@@ -9,7 +9,7 @@
       body { height: 100%; margin: 0; padding: 0 }
       #map_canvas { height: 100% }
     </style>
-    <script type="text/javascript" src="http://api.maps.nokia.com/2.2.3/jsl.js?with=maps,places,directions,positioning"></script>
+    <script type="text/javascript" src="http://api.maps.nokia.com/2.2.3/jsl.js?with=all"></script>
 	<script type="text/javascript" src="lib/base.js"></script>
 	<script type="text/javascript" src="lib/event.js"></script>
 	<script type="text/javascript" src="lib/LatLng.js"></script>
@@ -17,6 +17,9 @@
 	<script type="text/javascript" src="lib/Point.js"></script>
 	<script type="text/javascript" src="lib/MapTypeId.js"></script>
 	<script type="text/javascript" src="lib/MVCObject.js"></script>
+    <script type="text/javascript" src="lib/MVCArray.js"></script>
+	<script type="text/javascript" src="lib/Marker.js"></script>
+	<script type="text/javascript" src="lib/Geocoder.js"></script>
 	<script type="text/javascript" src="lib/Map.js"></script>
 	<script type="text/javascript">
 		// Set up is the credentials to use the API:
@@ -35,6 +38,10 @@
 		};
         map = new google.maps.Map(document.getElementById("map_canvas"),
             mapOptions);
+
+		var marker = new google.maps.Marker({position: map.getCenter()});
+		marker.setMap(map);
+		marker.setDraggable(true);
       }
     </script>
   </head>
