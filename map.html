@@ -22,7 +22,7 @@
         map = new google.maps.Map(document.getElementById("map_canvas"),
             mapOptions);
 
-		var marker = new google.maps.Marker({position: map.getCenter()});
+		var marker = new google.maps.Marker({position: map.getCenter(), icon: "http://jeffreybennett.net/images/av.png"});
 		marker.setMap(map);
 		marker.setDraggable(true);
       }
