@@ -16,4 +16,15 @@ fi
 
 #ls "$SRC_DIR\*.js"
 echo "Output to: $OUT_PATH"
-cat $SRC_DIR* > $OUT_PATH
+#cat $SRC_DIR* > $OUT_PATH
+cat "$SRC_DIR"base.js \
+	"$SRC_DIR"event.js \
+	"$SRC_DIR"LatLng.js \
+	"$SRC_DIR"LatLngBounds.js \
+	"$SRC_DIR"Point.js \
+	"$SRC_DIR"MapTypeId.js \
+	"$SRC_DIR"MVCObject.js \
+	"$SRC_DIR"Marker.js \
+	"$SRC_DIR"Geocoder.js \
+	"$SRC_DIR"Map.js \
+> $OUT_PATH

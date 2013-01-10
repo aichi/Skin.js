@@ -1,230 +1,283 @@
-
-google.maps.Geocoder = function() {
-	this.geocoder = nokia.places.search.manager;
-
-};
-
-//basic translation between our and their address types
-google.maps.Geocoder.addressTranslator = {
-	houseNumber: "street_number",
-	street: "route",
-	district: "sublocality", //also political
-	city: "locality", //also political
-	county: "administrative_area_level_2", //also political
-	country: "country", //also political
-	postalCode: "postal_code"
-};
-
-
-/**
- * @param {google.maps.GeocoderRequest} request
- * @param {Function} callback function(Array.<GeocoderResult>, GeocoderStatus))
- */
-google.maps.Geocoder.prototype.geocode = function(request, callback) {
-	var that = this;
-
-	that.geocoder.geoCode({
-		searchTerm: request.address ? request.address + (request.region ? ", " + request.region : "") : request.location.toString(),
-		onComplete: function(data, requestStatus, requestId) {
-			var response = [];
-			if (requestStatus == "OK") {
-				var locations = data.results ? data.results.items : [data.location],
-					i,
-					k,
-					latLng,
-					addressComponents;
-
-				if (locations.length > 0) {
-					for (i = 0; i < locations.length; i++) {
-						addressComponents = [];
-						if (locations[i].address) {
-							for (k in locations[i].address) {
-								addressComponents.push({
-									long_name: locations[i].address[k],
-									short_name: locations[i].address[k],
-									types: [google.maps.Geocoder.addressTranslator[k] ? google.maps.Geocoder.addressTranslator[k] : k]
-								});
-							}
-						}
-
-						latLng = google.maps.LatLng.fromCoordinate(locations[i].position);
-
-						response.push({
-							address_components: addressComponents,
-							formated_address: locations[i].name,
-							geometry: {
-								bounds: null,
-								location: latLng,
-								location_type: "ROOFTOP",
-								viewport: new google.maps.LatLngBounds(latLng, latLng)
-							},
-							type: ["street_address"] //todo 'lowest' common denominator
-						});
-					}
-				}
-			}
-			//status is compatible. nokia.places has status string OK or ERROR
-			callback(response, requestStatus);
-		}
-	});
-
-};
-
-google.maps.GeocoderStatus = {
-	ERROR : "ERROR",
-	INVALID_REQUEST: "INVALID_REQUEST",
-	OK: "OK",
-	OVER_QUERY_LIMIT: "OVER_QUERY_LIMIT",
-	REQUEST_DENIED: "REQUEST_DENIED",
-	UNKNOWN_ERROR: "UNKNOWN_ERROR",
-	ZERO_RESULTS: "ZERO_RESULTS"
-};
-
-/*
-GeocoderRequest:
-
-address	string	Address. Optional.
-bounds	LatLngBounds	LatLngBounds within which to search. Optional.
-location	LatLng	LatLng about which to search. Optional.
-region	string	Country code used to bias the search, specified as a Unicode region subtag / CLDR identifier. Optional.
-*/(function(){
-	var UNDEF;
-
-	google.maps.InfoWindow = function(opts) {
-		this.infoBubbles; //info bubbles manager
-		this.bubble; //currently visible bubble;
-		this.map; //to which marker belongs to
-
-		//set DOM Event listeners
-		/*this._domEventsListener = this._domEventsListener.bind(this);
-		this.marker.addListener("click", this._domEventsListener);
-		this.marker.addListener("dblclick", this._domEventsListener);
-		this.marker.addListener("drag", this._domEventsListener);
-		this.marker.addListener("dragend", this._domEventsListener);
-		this.marker.addListener("dragstart", this._domEventsListener);
-		this.marker.addListener("mousedown", this._domEventsListener);
-		this.marker.addListener("mouseout", this._domEventsListener);
-		this.marker.addListener("mouseover", this._domEventsListener);
-		this.marker.addListener("mouseup", this._domEventsListener);
-		this.marker.addListener("rightclick", this._domEventsListener);  */
-
-		// Because Marker is MVCObject properties observer should be set, see Map.
-		this.addObserver("*", function(obj, key, value, oldValue) {
-			switch (key) {
-				case "content":
-					break;
-				case "position":
-					break;
-				case "disableAutoPan":
-				case "maxWidth":
-				case "pixelOffset":
-				case "zIndex":
-					//do nothing
-					break;
-				case "map":
-					if (obj.map) {
-						//remove info bubble
-						obj.infoBubbles = null;
-						obj.bubble && obj.bubble.close();
-						obj.bubble = null;
-					}
-
-					if (value) {
-						obj.map = value;
-						//initialize manager, bubble is shown only after open() call
-						obj.infoBubbles = value.map.getComponentById("InfoBubbles");
-						obj.bubble = obj.infoBubbles.initBubble();
-					}
-					break;
-			}
-		});
-
-		this.setOptions(opts);
-		this.disableAutoPan == UNDEF && this.set("disableAutoPan", false);
-	};
-
-	google.maps._subClass(google.maps.MVCObject, google.maps.InfoWindow);
-
+// not rewrite main namespace
+window.google = window.google || {};
+// rewrite maps namespace with our own
+window.google.maps = {
 	/**
-	 * Closes Infowindow
+	 * Basic method which serializes arguments to string (arg1, arg2,..., argN)
+	 * @return {String}
 	 */
-	google.maps.InfoWindow.prototype.close = function() {
-		this.bubble.close();
-	};
+	_toString: function() {
+		return "(" + Array.prototype.slice.call(arguments).join(", ") + ")";
+	},
 
 	/**
-	 * Returns content of InfoWindow
-	 * @returns {String|HTMLElement}
-	 */
-	google.maps.InfoWindow.prototype.getContent = function() {
-		return this.content;
-	};
-
-	/**
-	 * Returns the position of InfoBubble
-	 * @return {google.maps.LatLng}
-	 */
-	google.maps.InfoWindow.prototype.getPosition = function() {
-		return this.position;
-	};
-
-	/**
+	 * Function which can compute MOD for negative numbers,
+	 * {@link http://www.yourdailygeekery.com/2011/06/28/modulo-of-negative-numbers.html}
+	 *
+	 * @param {Number} a
+	 * @param {Number} b
 	 * @return {Number}
 	 */
-	google.maps.InfoWindow.prototype.getZIndex = function()	{
-		return 0;
-	};
+	_modulo: function (a, b) {
+		return ((a % b) + b) % b;
+	},
 
 	/**
-	 * 	Opens InfoWindow on the given map and optionally anchored to given MVCObject - Marker.
-	 * 	@param {google.maps.Map} [map]
-	 * 	@param {google.maps.MVCObject} [anchor]
+	 * Subclassing of super class
+	 * @param {Function} sup
+	 * @param {Object} sub
 	 */
-	google.maps.InfoWindow.prototype.open = function(map, anchor) {
-		if (map) {
-			this.set("map", map);
+	_subClass: function(sup, sub){
+		sub.prototype = new sup();
+		sub.prototype.super = sub.prototype.constructor;
+		sub.prototype.constructor = sub;
+		return sub;
+	}
+};
+
+(function(ns) {
+	var registerDomEvents = [],
+		registerInstanceEvents = [],
+		event = ns.event = {};
+
+//nokia.maps.dom.Event.prototype.stop = nokia.maps.dom.Event.prototype.stopPropagation;
+
+/**
+ * Attach DOM event handler
+ * @param instance
+ * @param eventName
+ * @param handler
+ * @param capture
+ */
+event.addDomListener = function(instance, eventName, handler, capture){
+	var mapsViewListener = event._createDomMapsViewListenerObject(instance, eventName, handler, capture);
+
+	event._addDomListener(mapsViewListener);
+	return mapsViewListener;
+};
+
+/**
+ * Attach DOM event handler which is called only once
+ * @param instance
+ * @param eventName
+ * @param handler
+ * @param capture
+ */
+event.addDomListenerOnce = function(instance, eventName, handler, capture) {
+	var mapsViewListener = event._createDomMapsViewListenerObject(instance, eventName, handler, capture),
+		onceFunc = function() {
+			handler.apply(null, arguments);
+
+			event.removeListener(mapsViewListener);
+		};
+
+	mapsViewListener.handler = onceFunc;
+	event._addDomListener(mapsViewListener);
+	return mapsViewListener;
+};
+
+/**
+ * Creates MapsEventListener object for DOM listeners
+ * @param instance
+ * @param eventName
+ * @param handler
+ * @param capture
+ * @return {google.maps.event.MapsEventListener}
+ */
+event._createDomMapsViewListenerObject = function(instance, eventName, handler, capture) {
+	return {instance: instance, eventName: eventName, handler: handler, capture: capture};
+};
+
+/**
+ * Private method which attach DOM listeners
+ * @param {google.maps.event.MapsEventListener} listener
+ */
+event._addDomListener = function(listener) {
+	var instance = nokia.maps.dom.EventTarget(instance);
+	instance.addListener(listener.eventName, listener.handler, listener.capture);
+
+	registerDomEvents.push(listener);
+};
+
+/**
+ * Attach object event handler
+ * @param instance
+ * @param eventName
+ * @param handler
+ */
+event.addListener = function(instance, eventName, handler) {
+	var mapsViewListener = event._createInstanceMapsViewListenerObject(instance, eventName, handler);
+
+	event._addInstanceListener(mapsViewListener);
+	return mapsViewListener;
+};
+
+/**
+ * Attach object event handler which is called only once
+ * @param instance
+ * @param eventName
+ * @param handler
+ */
+event.addListenerOnce = function(instance, eventName, handler) {
+	var mapsViewListener = event._createDomMapsViewListenerObject(instance, eventName, handler),
+		onceFunc = function() {
+			handler.apply(null, arguments);
+
+			event.removeListener(mapsViewListener);
+		};
+
+	mapsViewListener.handler = onceFunc;
+	event._addInstanceListener(mapsViewListener);
+	return mapsViewListener;
+};
+
+/**
+ * Creates MapsEventListener object for DOM listeners
+ * @param instance
+ * @param eventName
+ * @param handler
+ * @return {google.maps.event.MapsEventListener}
+ */
+event._createInstanceMapsViewListenerObject = function(instance, eventName, handler) {
+	return {instance: instance, eventName: eventName, handler: handler};
+};
+
+/**
+ * Private method which attach DOM listeners
+ * @param {google.maps.event.MapsEventListener} listener
+ */
+event._addInstanceListener = function(listener) {
+	var instance = nokia.maps.dom.EventTarget(instance);
+	instance.addListener(listener.eventName, listener.handler);
+
+	registerInstanceEvents.push(listener);
+};
+
+/**
+ * Remove all event handlers from given DOM/object instance
+ * @param instance
+ */
+event.clearInstanceListeners = function(instance) {
+	var length = registerDomEvents.length;
+	while(length--) {
+		if (registerDomEvents[length].instance == instance) {
+			registerDomEvents.splice(length, 1);
 		}
+	}
 
-		if (this.bubble) {
-			this.bubble.update(this.content, anchor ? anchor.position.coordinate: this.position.coordinate);
-			this.bubble.open();
+	length = registerInstanceEvents.length;
+	while(length--) {
+		if (registerInstanceEvents[length].instance == instance) {
+			registerInstanceEvents.splice(length, 1);
 		}
-	};
+	}
+};
 
-	/**
-	 * Sets the InfoWindow content
-	 * @param {String | HTMLElement} content
-	 */
-	google.maps.InfoWindow.prototype.setContent = function(content)	{
-		this.set("content", content);
-	};
+/**
+ * Remove all listeners from DOM/object instance which listen on particular event name
+ * @param instance
+ * @param eventName
+ */
+event.clearListeners = function(instance, eventName) {
+	var length = registerDomEvents.length;
 
-	/**
-	 * Sets options
-	 * @param {google.maps.InfoWindowOptions} options
-	 */
-	google.maps.InfoWindow.prototype.setOptions = function(options)	{
-		//populate own properties
-		this.setValues(options);
-	};
+	while(length--) {
+		if (registerDomEvents[length].instance == instance && registerDomEvents[length].eventName == eventName) {
+			registerDomEvents.splice(length, 1);
+		}
+	}
 
-	/**
-	 * Sets the position of InfoWindow - tail end point
-	 * @param {google.maps.LatLng} position
-	 */
-	google.maps.InfoWindow.prototype.setPosition = function(position) {
-		this.set("position", position);
-	};
+	length = registerInstanceEvents.length;
 
-	/**
-	 * Sets the zIndex
-	 * @todo this is useless in 2.2.3 of Nokia API is not possible to change zIndex of InfoBubbles
-	 * @param {Number} zIndex
-	 */
-	google.maps.InfoWindow.prototype.setZIndex = function(zIndex) {
-		this.set("zIndex", zIndex);
-	};
-}());/**
+	while(length--) {
+		if (registerInstanceEvents[length].instance == instance && registerInstanceEvents[length].eventName == eventName) {
+			registerInstanceEvents.splice(length, 1);
+		}
+	}
+};
+
+/**
+ * Remove listener by listener reference
+ * @param {google.maps.event.MapsEventListener} listener
+ */
+event.removeListener = function(listener) {
+	var length = registerDomEvents.length;
+
+	while(length--) {
+		if (registerDomEvents[length] == listener) {
+			registerDomEvents.splice(length, 1);
+			return;
+		}
+	}
+
+	length = registerInstanceEvents.length;
+
+	while(length--) {
+		if (registerInstanceEvents[length] == listener) {
+			registerInstanceEvents.splice(length, 1);
+			return;
+		}
+	}
+};
+
+/**
+ * Trigger event on instance with given event name and optional arguments
+ * @param instance
+ * @param eventName
+ */
+event.trigger = function(instance, eventName) {
+	var length = registerDomEvents.length,
+		event;
+
+	while(length--) {
+		event = registerDomEvents[length];
+		if (event.instance == instance && event.eventName == eventName) {
+			event.handler.apply(null, Array.prototype.slice.call(arguments).splice(2));
+		}
+	}
+
+	length = registerInstanceEvents.length;
+
+	while(length--) {
+		event = registerInstanceEvents[length];
+		if (event.instance == instance && event.eventName == eventName) {
+			event.handler.apply(null, Array.prototype.slice.call(arguments).splice(2));
+		}
+	}
+};
+
+/**
+ * Prepare custom event {see: google.maps.MouseEvent}
+ * @param {Event} event
+ * @return {google.maps.MouseEvent}
+ * @private
+ */
+event._createCustomDomEvent = function(event) {
+	var x = event.displayX || event.clientX,
+		y = event.displayY || event.clientY,
+		customEvent = {
+			event: event,
+			stop: function() {event.stopPropagation()},
+		    latLng: (x !== undefined && y !== undefined) && google.maps.LatLng.fromCoordinate(event.display.pixelToGeo(x, y)),
+			pixel: new google.maps.Point(event.displayX, event.displayY)
+		};
+
+	return customEvent;
+};
+
+
+}(google.maps));
+
+/*
+	addDomListener(instance:Object, eventName:string, handler:Function, capture?:boolean)	MapsEventListener	Cross browser event handler registration. This listener is removed by calling removeListener(handle) for the handle that is returned by this function.
+	addDomListenerOnce(instance:Object, eventName:string, handler:Function, capture?:boolean)	MapsEventListener	Wrapper around addDomListener that removes the listener after the first event.
+	addListener(instance:Object, eventName:string, handler:Function)	MapsEventListener	Adds the given listener function to the given event name for the given object instance. Returns an identifier for this listener that can be used with removeListener().
+	addListenerOnce(instance:Object, eventName:string, handler:Function)	MapsEventListener	Like addListener, but the handler removes itself after handling the first event.
+	clearInstanceListeners(instance:Object)	None	Removes all listeners for all events for the given instance.
+	clearListeners(instance:Object, eventName:string)	None	Removes all listeners for the given event for the given instance.
+	removeListener(listener:MapsEventListener)	None	Removes the given listener, which should have been returned by addListener above.
+	trigger(instance:Object, eventName:string, var_args:*)	None	Triggers the given event. All arguments after eventName are passed as arguments to the listeners.
+*//**
  * Coordinate class, by default wraps longitude to [-180, 180)
  * @constructs
  * @param {Number} lat
@@ -451,111 +504,91 @@ google.maps.LatLngBounds.fromBoundingBox = function(boundingBox) {
 		ne = new google.maps.LatLng(boundingBox.topLeft.latitude, boundingBox.bottomRight.longitude);
 	return new google.maps.LatLngBounds(sw, ne);
 };/**
- * MVCArray is observable mutable array and is made by nokia.maps.util.OList
- * @constructor
- * @param {Variant[]} array
+ * Basic clas represening point, it is so simple so there is no need to mimic it with nokia.maps.util.Point
+ * @param {Number} x
+ * @param {Number} y
  */
-
-google.maps.MVCArray = function(array) {
-	//nokia.maps.util.OList.removeAt method is same like in MVCArray but there is event triggered
-	this._removeAtOriginal = this.removeAt;
-
-	this.addAll(array);
-};
-
-google.maps._subClass(nokia.maps.util.OList, google.maps.MVCArray);
-
-
-/**
- * Removes last item from array
- */
-google.maps.MVCArray.prototype.pop = function() {
-	this.removeAt(this.getLength() - 1);
+google.maps.Point = function(x, y) {
+	this.x = x;
+	this.y = y;
 };
 
 /**
- * Push one element to the end of array
- * @param {Variant} elem
- * @return {Number}
+ * Return if both points are equal
+ * @param {goole.maps.Point} other
+ * @return {Boolean}
  */
-google.maps.MVCArray.prototype.push = function(elem) {
-	this.set(elem, this.getLength() - 1);
-	return this.getLength();
+google.maps.Point.prototype.equals = function(other) {
+	return this.x == other.x && this.y == other.y;
 };
 
 /**
- * Sets element on specific index, if index is out of bounds than array is extended
- * @param {Number} i
- * @param {Variant} elem
+ * Returns string representation
+ * @return {String}
  */
-google.maps.MVCArray.prototype.setAt = function(i, elem) {
-	var length = this.getLength(),
-		j;
-	//extend array out of range
-	if (length < i) {
-		for (j = length; j < i; j++) {
-			this.add(undefined, j);
-		}
+google.maps.Point.prototype.toString = function() {
+	return google.maps._toString(this.x, this.y);
+};
+
+/**
+ * Transformation of Nokia point to gMap point
+ * @param {nokia.maps.util.Point} point
+ * @return {google.maps.Point}
+ */
+google.maps.Point.fromPoint = function(point) {
+	return new google.maps.Point(point.x, point.y);
+};
+
+/**
+ * Transformation from gMap point to Nokia point
+ * @param {google.maps.Point} point
+ * @return {nokia.maps.util.Point}
+ */
+google.maps.Point.toPoint = function(point) {
+	return new nokia.maps.util.Point(point.x, point.y);
+};
+google.maps.MapTypeId = {
+	HYBRID: "hybrid",
+	ROADMAP: "roadmap",
+	SATELLITE: "satellite",
+	TERRAIN: "terrain"
+};
+
+/**
+ * Coversion from gMaps string types to Nokia maps providers
+ * @param {google.maps.MapTypeId|String} type
+ * @return {nokia.maps.map.provider.Provider}
+ */
+google.maps.MapTypeId.constantToBaseMapType = function(type) {
+	var baseMapType;
+	switch(type) {
+		case google.maps.MapTypeId.HYBRID:
+			baseMapType = nokia.maps.map.Display.HYBRID;
+			break;
+		case google.maps.MapTypeId.ROADMAP:
+			baseMapType = nokia.maps.map.Display.NORMAL;
+			break;
+		case google.maps.MapTypeId.SATELLITE:
+			baseMapType = nokia.maps.map.Display.SATELLITE;
+			break;
+		case google.maps.MapTypeId.TERRAIN:
+			baseMapType = nokia.maps.map.Display.TERRAIN
+			break;
 	}
-	this.add(elem, i);
-
-	google.maps.event.trigger(this, "set_at", i, elem);
+	return baseMapType;
 };
 
 /**
- * Replace element on specific index
- * @param {Number} i
- * @param {Variant} elem
+ * Conversion from nokia base map type providers to gMaps string types
+ * @param {nokia.maps.map.provider.Provider} baseMapType
+ * @return {google.maps.MapTypeId|String}
  */
-google.maps.MVCArray.prototype.insertAt = function(i, elem) {
-	this.add(elem, i);
-	google.maps.event.trigger(this, "insert_at", i);
-};
-
-/**
- * Returns content of MVCArray as array
- * @return {Variant[]}
- */
-google.maps.MVCArray.prototype.getArray = function() {
-	return this.asArray();
-};
-
-/**
- * Returns object by index
- * @param {Number} i
- * @return {Variant}
- */
-google.maps.MVCArray.prototype.getAt = function(i) {
-	return this.get(i);
-};
-
-/**
- * Executes callback on all elements
- * @param {Function(Variant, Number)} callback
- */
-google.maps.MVCArray.prototype.forEach = function(callback) {
-	var length = this.getLength(),
-		i;
-
-	for (i = 0; i < length; i++) {
-		callback(this.get(i), i);
-	}
-};
-
-google.maps.MVCArray.prototype.removeAt = function(i) {
-	var elm = this.get(i);
-	this._removeAtOriginal(i);
-	google.maps.event.trigger(this, "remove_at", i, elm);
-};
-
-/**
- * Methods which are same in both APIs:
- * clear()
- * removeAt()
- * getLength()
- *
- */
-(function(){
+google.maps.MapTypeId.baseMapTypeToConstant = function(baseMapType) {
+	if (baseMapType == nokia.maps.map.Display.HYBRID) return google.maps.MapTypeId.HYBRID;
+	if (baseMapType == nokia.maps.map.Display.NORMAL) return google.maps.MapTypeId.ROADMAP;
+	if (baseMapType == nokia.maps.map.Display.SATELLITE) return google.maps.MapTypeId.SATELLITE;
+	if (baseMapType == nokia.maps.map.Display.TERRAIN) return google.maps.MapTypeId.TERRAIN;
+};(function(){
 	var observers = [];
 
 	/**
@@ -835,7 +868,438 @@ was set.
 
 /**
  nokia.maps.util.OObject sets first than observers are triggered with new and old value (sync).
- *//**
+ */(function(){
+	//trick to get reference to icon of StandardMarker which can be used if user don't specify its own icon
+	var _marker = new nokia.maps.map.Marker(new nokia.maps.geo.Coordinate(0,0)),
+		icon = _marker.icon,
+		anchor = _marker.anchor;
+		UNDEF = undefined;
+
+	google.maps.Marker = function(opts) {
+		var coord = opts.position.coordinate,
+			opt = {icon: icon},
+			x = anchor.x,
+			y = anchor.y;
+		this.marker = nokia.maps.dom.EventTarget(new nokia.maps.map.Marker(coord, opt));
+		this.map; //to which marker belongs to
+		this.origin = new google.maps.Point(0, 0); //default value
+		this.clickable; //if marker catch mouse/touch events. Default = true;
+
+		//set DOM Event listeners
+		this._domEventsListener = this._domEventsListener.bind(this);
+		this.marker.addListener("click", this._domEventsListener);
+		this.marker.addListener("dblclick", this._domEventsListener);
+		this.marker.addListener("drag", this._domEventsListener);
+		this.marker.addListener("dragend", this._domEventsListener);
+		this.marker.addListener("dragstart", this._domEventsListener);
+		this.marker.addListener("mousedown", this._domEventsListener);
+		this.marker.addListener("mouseout", this._domEventsListener);
+		this.marker.addListener("mouseover", this._domEventsListener);
+		this.marker.addListener("mouseup", this._domEventsListener);
+		this.marker.addListener("rightclick", this._domEventsListener);
+
+		// Because Marker is MVCObject properties observer should be set, see Map.
+		this.addObserver("*", function(obj, key, value, oldValue) {
+			switch (key) {
+				case "position":
+					obj.marker.set("coordinate", value.coordinate);
+					break;
+				case "draggable":
+				case "zIndex":
+					obj.marker.set(key, value);
+					break;
+				case "visible":
+					//obj.marker.set("visibility", value);
+					//todo: how to set visibility?
+					break;
+				case "icon":
+					var icon;
+					if (value.url && !value.height) {  //google.maps.Icon
+						icon = new nokia.maps.gfx.BitmapImage(
+							value.url,
+							document,
+							value.size ? value.size.width : UNDEF,   //this is wrong, because we need crop from origin to size, which should be async and more complex
+							value.size ? value.size.height : UNDEF,
+							value.origin ? value.origin.width : UNDEF,
+							value.origin ? value.origin.height : UNDEF);
+						value.origin && (obj.origin = value.origin);
+						//todo: scaling is not supported in 2.2.3 version
+						//todo: implement value.anchor, by default is bottom, middle
+					} else if (value.path) { //google.maps.Symbol
+						//todo: support  Symbol
+					} else {
+						icon = value;
+					}
+					obj.marker.set("icon", icon);
+					break;
+				case "anchorPoint":
+					obj.marker.set("anchor", new nokia.maps.util.Point(value.x, value.y));
+					break;
+				case "shape":
+					obj.marker.set("hitArea", obj._prepareHitArea(value));
+					break;
+				case "clickable":
+					break;
+				case "map":
+					if (obj.map) {
+						obj.map.map.objects.remove(obj.marker);
+					}
+
+					if (value) {
+						obj.map = value;
+						obj.marker && obj.map.map.objects.add(obj.marker);
+					}
+					break;
+			}
+		});
+
+		this.setOptions(opts);
+		this.clickable == UNDEF && this.set("clickable", true);
+		if (this.anchorPoint == UNDEF) {
+			//marker is made by another image
+			if (this.marker && this.marker.icon !== icon) {
+				if (this.marker.icon.width) {
+					x = this.marker.icon.width;
+					y = this.marker.icon.height;
+				}
+				//todo: can be improved by onload handler when string or not loaded Image to get propper size
+			}
+			//todo: there is wrong assumptions that anchorPoint is same like anchor in nAPI!!! split them!!!
+			this.set("anchorPoint", new google.maps.Point(x, y));
+		}
+	};
+
+	google.maps._subClass(google.maps.MVCObject, google.maps.Marker);
+
+	google.maps.Marker.MAX_ZINDEX = 1000000;
+
+	/**
+	 * @return {google.maps.Animation}
+	 */
+	google.maps.Marker.prototype.getAnimation = function ()	{
+		return null;
+	};
+
+	/**
+	 * @return {Boolean}
+	 */
+	google.maps.Marker.prototype.getClickable = function ()	{
+		return this.clickable;
+	};
+
+	/**
+	 * @return {String}
+	 */
+	google.maps.Marker.prototype.getCursor = function () {
+		return "hand";
+	};
+
+	/**
+	 * @return {Boolean}
+	 */
+	google.maps.Marker.prototype.getDraggable = function () {
+		return this.marker.draggable;
+	};
+
+	/**
+	 * There is no way to have marker with shadows
+	 * @return {Boolean}
+	 */
+	google.maps.Marker.prototype.getFlat = function () {
+		return false;
+	};
+
+	/**
+	 * @return {String | google.maps.Icon | google.maps.Symbol}
+	 */
+	google.maps.Marker.prototype.getIcon = function () {
+		return "";
+	};
+
+	/**
+	 * @return {google.map.Map | google.map.StreetViewPanorama}
+	 */
+	google.maps.Marker.prototype.getMap = function () {
+		return this.map;
+	};
+
+	/**
+	 * @return {google.map.LatLng}
+	 */
+	google.maps.Marker.prototype.getPosition = function () {
+		return google.maps.LatLng.fromCoordinate(this.marker.coordinate);
+	};
+
+	/**
+	 * There is no way to have marker with shadows
+	 * @return {String | google.map.Icon | google.map.Symbol}
+	 */
+	google.maps.Marker.prototype.getShadow = function () {
+		return "";
+	};
+
+	/**
+	 * Returns the hitarea of marker
+	 * @return {google.map.MarkerShape}
+	 */
+	google.maps.Marker.prototype.getShape = function () {
+		var hitArea = this.marker.hitArea;
+		return {type: hitArea.type, coords: hitArea.values};
+	};
+
+	/**
+	 * Returns title
+	 * @return {String}
+	 */
+	google.maps.Marker.prototype.getTitle = function () {
+		return this.marker.text;
+	};
+
+	/**
+	 * @return {Boolean}
+	 */
+	google.maps.Marker.prototype.getVisible = function () {
+		return this.marker.isVisible();
+	};
+	/**
+	 * @return {Number}
+	 */
+	google.maps.Marker.prototype.getZIndex = function () {
+		return this.marker.zIndex;
+	};
+
+	/**
+	 * Start an animation. Any ongoing animation will be cancelled. Currently supported animations are: BOUNCE, DROP.
+	 * Passing in null will cause any animation to stop.
+	 * @param {google.map.Animation} animation
+	 */
+	google.maps.Marker.prototype.setAnimation = function (animation) {
+		this.set("animation", animation);
+	};
+
+	/**
+	 * @param {Boolean} flag
+	 */
+	google.maps.Marker.prototype.setClickable = function (flag) {
+		this.set("clickable", flag);
+	};
+
+	/**
+	 * @param {String} cursor
+	 */
+	google.maps.Marker.prototype.setCursor = function (cursor) {
+		this.set("cursor", cursor);
+	};
+
+	/**
+	 * @param {Boolean} flag
+	 */
+	google.maps.Marker.prototype.setDraggable = function (flag) {
+		this.set("draggable", flag);
+	};
+
+	/**
+	 * @param {Boolean} flag
+	 */
+	google.maps.Marker.prototype.setFlat = function (flag) {
+		this.set("flat", flag);
+	};
+
+	/**
+	 * @param {string | google.map.Icon | google.map.Symbol} icon
+	 */
+	google.maps.Marker.prototype.setIcon = function (icon) {
+		this.set("icon", icon);
+	};
+
+	/**
+	 * Renders the marker on the specified map or panorama. If map is set to null, the marker will be removed.
+	 * @param {google.map.Map|google.map.StreetViewPanorama} map
+	 */
+	google.maps.Marker.prototype.setMap = function (map) {
+		this.set("map", map);
+	};
+
+	/**
+	 * @param {google.maps.MarkerOptions} options
+	 */
+	google.maps.Marker.prototype.setOptions = function (options) {
+		//populate own properties
+		this.setValues(options);
+		/*
+		options.draggable && this.setDraggable(options.draggable);
+		options.icon && this.setIcon(options.icon); //todo: convert from Icon/Symbol to gfx.Image, now working only with strings
+		options.shape && this.setShape(options.shape);
+		options.visible !== undefined && this.setVisible(options.visible);
+		options.zIndex && this.setZIndex(options.zIndex);
+		options.position && this.setPosition(options.position);
+
+		//attach to map if map is set
+		options.map && this.setMap(options.map); */
+	};
+
+	/**
+	 * @param {google.map.LatLng} latlng
+	 */
+	google.maps.Marker.prototype.setPosition = function (latlng) {
+		this.set("position", latlng);
+	};
+
+	/**
+	 * @param {string | google.map.Icon | google.map.Symbol} shadow
+	 */
+	google.maps.Marker.prototype.setShadow = function (shadow) {
+		this.set("shadow", shadow);
+	};
+
+	/**
+	 * Set the hitarea
+	 * @param {google.map.MarkerShape} shape
+	 */
+	google.maps.Marker.prototype.setShape = function (shape) {
+		this.set("shape", shape);
+	};
+
+	/**
+	 * Prepares HitArea from google.maps.Shape
+	 * @param shape
+	 * @return {nokia.maps.map.IHitArea}
+	 * @private
+	 */
+	google.maps.Marker.prototype._prepareHitArea = function(shape) {
+		return {type: shape.type, values: shape.coords};
+	};
+
+	/**
+	 * Title is shown on mouse hover
+	 * @param {String} title
+	 */
+	google.maps.Marker.prototype.setTitle = function (title) {
+		this.marker.set("title", title);
+	};
+
+	/**
+	 * @param {Boolean} visible
+	 */
+	google.maps.Marker.prototype.setVisible = function (visible) {
+		this.set("visible", visible);
+	};
+
+	/**
+	 * @param {Number} zIndex
+	 */
+	google.maps.Marker.prototype.setZIndex = function (zIndex) {
+		this.set("zIndex", zIndex);
+	};
+
+	/**
+	 * Emits all mouse and drag events, this event is "MouseEvent" which contains stop method
+	 * and also latLng property
+	 * @param {Event} event
+	 */
+	google.maps.Marker.prototype._domEventsListener = function(event) {
+		this.clickable && google.maps.event.trigger(this, event.type, google.maps.event._createCustomDomEvent(event));
+	};
+
+}());
+
+/**
+ * google.maps.Icon is literal object with properties:
+ * anchor	Point	The position at which to anchor an image in correspondance to the location of the marker on the map. By default, the anchor is located along the center point of the bottom of the image.
+ * origin	Point	The position of the image within a sprite, if any. By default, the origin is located at the top left corner of the image (0, 0).
+ * scaledSize	Size	The size of the entire image after scaling, if any. Use this property to stretch/shrink an image or a sprite.
+ * size	Size	The display size of the sprite or image. When using sprites, you must specify the sprite size. If the size is not provided, it will be set when the image loads.
+ * url	string	The URL of the image or sprite sheet.
+ */
+google.maps.Geocoder = function() {
+	this.geocoder = nokia.places.search.manager;
+
+};
+
+//basic translation between our and their address types
+google.maps.Geocoder.addressTranslator = {
+	houseNumber: "street_number",
+	street: "route",
+	district: "sublocality", //also political
+	city: "locality", //also political
+	county: "administrative_area_level_2", //also political
+	country: "country", //also political
+	postalCode: "postal_code"
+};
+
+
+/**
+ * @param {google.maps.GeocoderRequest} request
+ * @param {Function} callback function(Array.<GeocoderResult>, GeocoderStatus))
+ */
+google.maps.Geocoder.prototype.geocode = function(request, callback) {
+	var that = this;
+
+	that.geocoder.geoCode({
+		searchTerm: request.address ? request.address + (request.region ? ", " + request.region : "") : request.location.toString(),
+		onComplete: function(data, requestStatus, requestId) {
+			var response = [];
+			if (requestStatus == "OK") {
+				var locations = data.results ? data.results.items : [data.location],
+					i,
+					k,
+					latLng,
+					addressComponents;
+
+				if (locations.length > 0) {
+					for (i = 0; i < locations.length; i++) {
+						addressComponents = [];
+						if (locations[i].address) {
+							for (k in locations[i].address) {
+								addressComponents.push({
+									long_name: locations[i].address[k],
+									short_name: locations[i].address[k],
+									types: [google.maps.Geocoder.addressTranslator[k] ? google.maps.Geocoder.addressTranslator[k] : k]
+								});
+							}
+						}
+
+						latLng = google.maps.LatLng.fromCoordinate(locations[i].position);
+
+						response.push({
+							address_components: addressComponents,
+							formated_address: locations[i].name,
+							geometry: {
+								bounds: null,
+								location: latLng,
+								location_type: "ROOFTOP",
+								viewport: new google.maps.LatLngBounds(latLng, latLng)
+							},
+							type: ["street_address"] //todo 'lowest' common denominator
+						});
+					}
+				}
+			}
+			//status is compatible. nokia.places has status string OK or ERROR
+			callback(response, requestStatus);
+		}
+	});
+
+};
+
+google.maps.GeocoderStatus = {
+	ERROR : "ERROR",
+	INVALID_REQUEST: "INVALID_REQUEST",
+	OK: "OK",
+	OVER_QUERY_LIMIT: "OVER_QUERY_LIMIT",
+	REQUEST_DENIED: "REQUEST_DENIED",
+	UNKNOWN_ERROR: "UNKNOWN_ERROR",
+	ZERO_RESULTS: "ZERO_RESULTS"
+};
+
+/*
+GeocoderRequest:
+
+address	string	Address. Optional.
+bounds	LatLngBounds	LatLngBounds within which to search. Optional.
+location	LatLng	LatLng about which to search. Optional.
+region	string	Country code used to bias the search, specified as a Unicode region subtag / CLDR identifier. Optional.
+*//**
  * Main map class
  * @constructs
  * @param {HTMLElement} mapDiv
@@ -1186,996 +1650,4 @@ google.maps.Map.prototype._baseMapTypeObserver = function(obj, key, newValue, ol
 /*
 projection_changed	None	This event is fired when the projection has changed.
 tilesloaded	None	This event is fired when the visible tiles have finished loading.
-*/
-google.maps.MapTypeId = {
-	HYBRID: "hybrid",
-	ROADMAP: "roadmap",
-	SATELLITE: "satellite",
-	TERRAIN: "terrain"
-};
-
-/**
- * Coversion from gMaps string types to Nokia maps providers
- * @param {google.maps.MapTypeId|String} type
- * @return {nokia.maps.map.provider.Provider}
- */
-google.maps.MapTypeId.constantToBaseMapType = function(type) {
-	var baseMapType;
-	switch(type) {
-		case google.maps.MapTypeId.HYBRID:
-			baseMapType = nokia.maps.map.Display.HYBRID;
-			break;
-		case google.maps.MapTypeId.ROADMAP:
-			baseMapType = nokia.maps.map.Display.NORMAL;
-			break;
-		case google.maps.MapTypeId.SATELLITE:
-			baseMapType = nokia.maps.map.Display.SATELLITE;
-			break;
-		case google.maps.MapTypeId.TERRAIN:
-			baseMapType = nokia.maps.map.Display.TERRAIN
-			break;
-	}
-	return baseMapType;
-};
-
-/**
- * Conversion from nokia base map type providers to gMaps string types
- * @param {nokia.maps.map.provider.Provider} baseMapType
- * @return {google.maps.MapTypeId|String}
- */
-google.maps.MapTypeId.baseMapTypeToConstant = function(baseMapType) {
-	if (baseMapType == nokia.maps.map.Display.HYBRID) return google.maps.MapTypeId.HYBRID;
-	if (baseMapType == nokia.maps.map.Display.NORMAL) return google.maps.MapTypeId.ROADMAP;
-	if (baseMapType == nokia.maps.map.Display.SATELLITE) return google.maps.MapTypeId.SATELLITE;
-	if (baseMapType == nokia.maps.map.Display.TERRAIN) return google.maps.MapTypeId.TERRAIN;
-};(function(){
-	//trick to get reference to icon of StandardMarker which can be used if user don't specify its own icon
-	var _marker = new nokia.maps.map.Marker(new nokia.maps.geo.Coordinate(0,0)),
-		icon = _marker.icon,
-		anchor = _marker.anchor;
-		UNDEF = undefined;
-
-	google.maps.Marker = function(opts) {
-		var coord = opts.position.coordinate,
-			opt = {icon: icon},
-			x = anchor.x,
-			y = anchor.y;
-		this.marker = nokia.maps.dom.EventTarget(new nokia.maps.map.Marker(coord, opt));
-		this.map; //to which marker belongs to
-		this.origin = new google.maps.Point(0, 0); //default value
-		this.clickable; //if marker catch mouse/touch events. Default = true;
-
-		//set DOM Event listeners
-		this._domEventsListener = this._domEventsListener.bind(this);
-		this.marker.addListener("click", this._domEventsListener);
-		this.marker.addListener("dblclick", this._domEventsListener);
-		this.marker.addListener("drag", this._domEventsListener);
-		this.marker.addListener("dragend", this._domEventsListener);
-		this.marker.addListener("dragstart", this._domEventsListener);
-		this.marker.addListener("mousedown", this._domEventsListener);
-		this.marker.addListener("mouseout", this._domEventsListener);
-		this.marker.addListener("mouseover", this._domEventsListener);
-		this.marker.addListener("mouseup", this._domEventsListener);
-		this.marker.addListener("rightclick", this._domEventsListener);
-
-		// Because Marker is MVCObject properties observer should be set, see Map.
-		this.addObserver("*", function(obj, key, value, oldValue) {
-			switch (key) {
-				case "position":
-					obj.marker.set("coordinate", value.coordinate);
-					break;
-				case "draggable":
-				case "zIndex":
-					obj.marker.set(key, value);
-					break;
-				case "visible":
-					//obj.marker.set("visibility", value);
-					//todo: how to set visibility?
-					break;
-				case "icon":
-					var icon;
-					if (value.url && !value.height) {  //google.maps.Icon
-						icon = new nokia.maps.gfx.BitmapImage(
-							value.url,
-							document,
-							value.size ? value.size.width : UNDEF,   //this is wrong, because we need crop from origin to size, which should be async and more complex
-							value.size ? value.size.height : UNDEF,
-							value.origin ? value.origin.width : UNDEF,
-							value.origin ? value.origin.height : UNDEF);
-						value.origin && (obj.origin = value.origin);
-						//todo: scaling is not supported in 2.2.3 version
-						//todo: implement value.anchor, by default is bottom, middle
-					} else if (value.path) { //google.maps.Symbol
-						//todo: support  Symbol
-					} else {
-						icon = value;
-					}
-					obj.marker.set("icon", icon);
-					break;
-				case "anchorPoint":
-					obj.marker.set("anchor", new nokia.maps.util.Point(value.x, value.y));
-					break;
-				case "shape":
-					obj.marker.set("hitArea", obj._prepareHitArea(value));
-					break;
-				case "clickable":
-					break;
-				case "map":
-					if (obj.map) {
-						obj.map.map.objects.remove(obj.marker);
-					}
-
-					if (value) {
-						obj.map = value;
-						obj.marker && obj.map.map.objects.add(obj.marker);
-					}
-					break;
-			}
-		});
-
-		this.setOptions(opts);
-		this.clickable == UNDEF && this.set("clickable", true);
-		if (this.anchorPoint == UNDEF) {
-			//marker is made by another image
-			if (this.marker && this.marker.icon !== icon) {
-				if (this.marker.icon.width) {
-					x = this.marker.icon.width;
-					y = this.marker.icon.height;
-				}
-				//todo: can be improved by onload handler when string or not loaded Image to get propper size
-			}
-			//todo: there is wrong assumptions that anchorPoint is same like anchor in nAPI!!! split them!!!
-			this.set("anchorPoint", new google.maps.Point(x, y));
-		}
-	};
-
-	google.maps._subClass(google.maps.MVCObject, google.maps.Marker);
-
-	google.maps.Marker.MAX_ZINDEX = 1000000;
-
-	/**
-	 * @return {google.maps.Animation}
-	 */
-	google.maps.Marker.prototype.getAnimation = function ()	{
-		return null;
-	};
-
-	/**
-	 * @return {Boolean}
-	 */
-	google.maps.Marker.prototype.getClickable = function ()	{
-		return this.clickable;
-	};
-
-	/**
-	 * @return {String}
-	 */
-	google.maps.Marker.prototype.getCursor = function () {
-		return "hand";
-	};
-
-	/**
-	 * @return {Boolean}
-	 */
-	google.maps.Marker.prototype.getDraggable = function () {
-		return this.marker.draggable;
-	};
-
-	/**
-	 * There is no way to have marker with shadows
-	 * @return {Boolean}
-	 */
-	google.maps.Marker.prototype.getFlat = function () {
-		return false;
-	};
-
-	/**
-	 * @return {String | google.maps.Icon | google.maps.Symbol}
-	 */
-	google.maps.Marker.prototype.getIcon = function () {
-		return "";
-	};
-
-	/**
-	 * @return {google.map.Map | google.map.StreetViewPanorama}
-	 */
-	google.maps.Marker.prototype.getMap = function () {
-		return this.map;
-	};
-
-	/**
-	 * @return {google.map.LatLng}
-	 */
-	google.maps.Marker.prototype.getPosition = function () {
-		return google.maps.LatLng.fromCoordinate(this.marker.coordinate);
-	};
-
-	/**
-	 * There is no way to have marker with shadows
-	 * @return {String | google.map.Icon | google.map.Symbol}
-	 */
-	google.maps.Marker.prototype.getShadow = function () {
-		return "";
-	};
-
-	/**
-	 * Returns the hitarea of marker
-	 * @return {google.map.MarkerShape}
-	 */
-	google.maps.Marker.prototype.getShape = function () {
-		var hitArea = this.marker.hitArea;
-		return {type: hitArea.type, coords: hitArea.values};
-	};
-
-	/**
-	 * Returns title
-	 * @return {String}
-	 */
-	google.maps.Marker.prototype.getTitle = function () {
-		return this.marker.text;
-	};
-
-	/**
-	 * @return {Boolean}
-	 */
-	google.maps.Marker.prototype.getVisible = function () {
-		return this.marker.isVisible();
-	};
-	/**
-	 * @return {Number}
-	 */
-	google.maps.Marker.prototype.getZIndex = function () {
-		return this.marker.zIndex;
-	};
-
-	/**
-	 * Start an animation. Any ongoing animation will be cancelled. Currently supported animations are: BOUNCE, DROP.
-	 * Passing in null will cause any animation to stop.
-	 * @param {google.map.Animation} animation
-	 */
-	google.maps.Marker.prototype.setAnimation = function (animation) {
-		this.set("animation", animation);
-	};
-
-	/**
-	 * @param {Boolean} flag
-	 */
-	google.maps.Marker.prototype.setClickable = function (flag) {
-		this.set("clickable", flag);
-	};
-
-	/**
-	 * @param {String} cursor
-	 */
-	google.maps.Marker.prototype.setCursor = function (cursor) {
-		this.set("cursor", cursor);
-	};
-
-	/**
-	 * @param {Boolean} flag
-	 */
-	google.maps.Marker.prototype.setDraggable = function (flag) {
-		this.set("draggable", flag);
-	};
-
-	/**
-	 * @param {Boolean} flag
-	 */
-	google.maps.Marker.prototype.setFlat = function (flag) {
-		this.set("flat", flag);
-	};
-
-	/**
-	 * @param {string | google.map.Icon | google.map.Symbol} icon
-	 */
-	google.maps.Marker.prototype.setIcon = function (icon) {
-		this.set("icon", icon);
-	};
-
-	/**
-	 * Renders the marker on the specified map or panorama. If map is set to null, the marker will be removed.
-	 * @param {google.map.Map|google.map.StreetViewPanorama} map
-	 */
-	google.maps.Marker.prototype.setMap = function (map) {
-		this.set("map", map);
-	};
-
-	/**
-	 * @param {google.maps.MarkerOptions} options
-	 */
-	google.maps.Marker.prototype.setOptions = function (options) {
-		//populate own properties
-		this.setValues(options);
-		/*
-		options.draggable && this.setDraggable(options.draggable);
-		options.icon && this.setIcon(options.icon); //todo: convert from Icon/Symbol to gfx.Image, now working only with strings
-		options.shape && this.setShape(options.shape);
-		options.visible !== undefined && this.setVisible(options.visible);
-		options.zIndex && this.setZIndex(options.zIndex);
-		options.position && this.setPosition(options.position);
-
-		//attach to map if map is set
-		options.map && this.setMap(options.map); */
-	};
-
-	/**
-	 * @param {google.map.LatLng} latlng
-	 */
-	google.maps.Marker.prototype.setPosition = function (latlng) {
-		this.set("position", latlng);
-	};
-
-	/**
-	 * @param {string | google.map.Icon | google.map.Symbol} shadow
-	 */
-	google.maps.Marker.prototype.setShadow = function (shadow) {
-		this.set("shadow", shadow);
-	};
-
-	/**
-	 * Set the hitarea
-	 * @param {google.map.MarkerShape} shape
-	 */
-	google.maps.Marker.prototype.setShape = function (shape) {
-		this.set("shape", shape);
-	};
-
-	/**
-	 * Prepares HitArea from google.maps.Shape
-	 * @param shape
-	 * @return {nokia.maps.map.IHitArea}
-	 * @private
-	 */
-	google.maps.Marker.prototype._prepareHitArea = function(shape) {
-		return {type: shape.type, values: shape.coords};
-	};
-
-	/**
-	 * Title is shown on mouse hover
-	 * @param {String} title
-	 */
-	google.maps.Marker.prototype.setTitle = function (title) {
-		this.marker.set("title", title);
-	};
-
-	/**
-	 * @param {Boolean} visible
-	 */
-	google.maps.Marker.prototype.setVisible = function (visible) {
-		this.set("visible", visible);
-	};
-
-	/**
-	 * @param {Number} zIndex
-	 */
-	google.maps.Marker.prototype.setZIndex = function (zIndex) {
-		this.set("zIndex", zIndex);
-	};
-
-	/**
-	 * Emits all mouse and drag events, this event is "MouseEvent" which contains stop method
-	 * and also latLng property
-	 * @param {Event} event
-	 */
-	google.maps.Marker.prototype._domEventsListener = function(event) {
-		this.clickable && google.maps.event.trigger(this, event.type, google.maps.event._createCustomDomEvent(event));
-	};
-
-}());
-
-/**
- * google.maps.Icon is literal object with properties:
- * anchor	Point	The position at which to anchor an image in correspondance to the location of the marker on the map. By default, the anchor is located along the center point of the bottom of the image.
- * origin	Point	The position of the image within a sprite, if any. By default, the origin is located at the top left corner of the image (0, 0).
- * scaledSize	Size	The size of the entire image after scaling, if any. Use this property to stretch/shrink an image or a sprite.
- * size	Size	The display size of the sprite or image. When using sprites, you must specify the sprite size. If the size is not provided, it will be set when the image loads.
- * url	string	The URL of the image or sprite sheet.
- *//**
- * Basic clas represening point, it is so simple so there is no need to mimic it with nokia.maps.util.Point
- * @param {Number} x
- * @param {Number} y
- */
-google.maps.Point = function(x, y) {
-	this.x = x;
-	this.y = y;
-};
-
-/**
- * Return if both points are equal
- * @param {goole.maps.Point} other
- * @return {Boolean}
- */
-google.maps.Point.prototype.equals = function(other) {
-	return this.x == other.x && this.y == other.y;
-};
-
-/**
- * Returns string representation
- * @return {String}
- */
-google.maps.Point.prototype.toString = function() {
-	return google.maps._toString(this.x, this.y);
-};
-
-/**
- * Transformation of Nokia point to gMap point
- * @param {nokia.maps.util.Point} point
- * @return {google.maps.Point}
- */
-google.maps.Point.fromPoint = function(point) {
-	return new google.maps.Point(point.x, point.y);
-};
-
-/**
- * Transformation from gMap point to Nokia point
- * @param {google.maps.Point} point
- * @return {nokia.maps.util.Point}
- */
-google.maps.Point.toPoint = function(point) {
-	return new nokia.maps.util.Point(point.x, point.y);
-};(function(){
-	var UNDEF;
-
-	/**
-	 * Renders a polyline on the map
-	 * @param opt
-	 * @constructor
-	 */
-	google.maps.Polyline = function(opt) {
-		var coords;
-
-		this.strokeOpacity = 1;
-		this.strokeColor = "#000";
-		this.strokeWidth = 4;
-		this.polyline = new nokia.maps.map.Polyline([], {pen: {strokeColor: this.strokeColor, lineWidth: this.strokeWidth}});
-
-		//set DOM Event listeners
-		this._domEventsListener = this._domEventsListener.bind(this);
-		this.marker.addListener("click", this._domEventsListener);
-		this.marker.addListener("dblclick", this._domEventsListener);
-		this.marker.addListener("mousedown", this._domEventsListener);
-		this.marker.addListener("mouseout", this._domEventsListener);
-		this.marker.addListener("mousemove", this._domEventsListener);
-		this.marker.addListener("mouseover", this._domEventsListener);
-		this.marker.addListener("mouseup", this._domEventsListener);
-		this.marker.addListener("rightclick", this._domEventsListener);
-
-		// Because Polyline is MVCObject properties observer should be set, see Map.
-		this.addObserver("*", function(obj, key, value, oldValue) {
-			switch (key) {
-				case "clickable":
-				case "editable":
-				case "geodesic":
-				case "icons":
-					break;
-				case "map":
-					obj.polyline.path.getLength() && obj._attachToMap(value);
-					break;
-				case "path":
-					if (!(obj.path instanceof google.maps.MVCArray)) {
-						obj.path = new google.maps.MVCArray(obj.path);
-					}
-
-					//observing path to modify internal polyline path
-					obj.path.addObserver(obj._pathObserver, obj);
-					oldValue && oldValue.removeObserver(obj._pathObserver, obj);
-
-					coords = obj._latLngMVCArrayToCoordsArray(obj.path);
-					obj.polyline.set("path", coords);
-
-					obj.map && !obj.polyline.getDisplays().length && obj._attachToMap(obj.map);
-
-					break;
-				case "strokeColor":
-				case "strokeOpacity":
-					obj.polyline.set("pen", new nokia.maps.util.Pen({
-						strokeColor: nokia.maps.util.ColorHelper.getHex3(obj.strokeColor) + nokia.maps.gfx.Color.byteOf(obj.strokeOpacity)
-					}, obj.polyline.pen));
-					break;
-				case "strokeWeight":
-					obj.polyline.set("pen", new nokia.maps.util.Pen({
-						lineWidth: obj.strokeWidth
-					}));
-					break;
-				case "zIndex":
-					obj.polyline.set(key, value);
-					break;
-				case "visible":
-					obj.polyline.set("visibility", obj.visible);
-					break;
-
-			}
-		});
-
-		this.visible = true;
-		this.editable = false;
-		this.geodesic = false;
-
-		this.setOptions(opt);
-		this.clickable == UNDEF && this.set("clickable", true);
-	};
-
-	google.maps._subClass(google.maps.MVCObject, google.maps.Polyline);
-
-	/**
-	 * Internal method which attach polyline to map
-	 * @param {google.maps.Map} value
-	 * @private
-	 */
-	google.maps.Polyline.prototype._attachToMap = function(value) {
-		if (this.map) {
-			this.map.map.objects.remove(this.polyline);
-		}
-
-		if (value) {
-			this.map = value;
-			map.map.objects.add(this.polyline);
-		}
-	};
-
-	/**
-	 * Path observer which propagates changes to internal nokia polyline path
-	 * @param {nokia.maps.util.OList} obj path
-	 * @param {String} operation add or remove
-	 * @param {google.maps.Coordinate} element
-	 * @param {Number} index
-	 * @private
-	 */
-	google.maps.Polyline.prototype._pathObserver = function(obj, operation, element, index) {
-		if (operation == "add")
-			this.polyline.path.add(element.coordinate, index);
-		else if (operation == "remove")
-			this.polyline.path.removeAt(index);
-	};
-
-	/**
-	 * Returns if polyline is editable by user
-	 * @return {Boolean}
-	 */
-	google.maps.Polyline.prototype.getEditable = function() {
-		return false;
-	};
-
-	/**
-	 * Returns map to which is shape attached
-	 * @return {google.maps.Map}
-	 */
-	google.maps.Polyline.prototype.getMap = function() {
-		return this.map;
-	};
-
-	/**
-	 * Returns shape path
-	 * @return {MVCArray.<google.maps.LatLng>}
-	 */
-	google.maps.Polyline.prototype.getPath = function() {
-		return this.path;
-	};
-
-	/**
-	 * Returns if polyline is visible
-	 * @return {Boolean}
-	 */
-	google.maps.Polyline.prototype.getVisible = function() {
-		return this.polyline.isVisible();
-	};
-
-	/**
-	 * Set shape as user editable
-	 * @param {Boolean} editable
-	 * @todo: there is no easy way to support this attribute
-	 */
-	google.maps.Polyline.prototype.setEditable = function(editable) {
-		this.set("editable", editable);
-	};
-
-	/**
-	 * Attach shape to map
-	 * @param {google.maps.Map} map
-	 */
-	google.maps.Polyline.prototype.setMap = function(map) {
-		this.set("map", map);
-	};
-
-	/**
-	 * Sets options
-	 * @param {google.maps.PolylineOptions} options
-	 */
-	google.maps.Polyline.prototype.setOptions = function(options) {
-		//populate own properties
-		this.setValues(options);
-
-		/*options.clickable && this.set("clickable", options.clickable);
-		options.editable && this.set("editable", options.editable);
-		options.geodesic && this.set("geodesic", options.geodesic);
-		options.icons && this.set("icons", options.icons);
-		options.map && this.set("map", options.map);
-		options.path && this.set("path", options.path);
-		options.strokeColor && this.set("strokeColor", options.strokeColor);
-		options.strokeOpacity && this.set("strokeOpacity", options.strokeOpacity);
-		options.strokeWeight && this.set("strokeWeight", options.strokeWeight);
-		options.visible && this.set("visible", options.visible);
-		options.zIndex && this.set("zIndex", options.zIndex); */
-	};
-
-	/**
-	 * Sets first path
-	 * @param  {google.maps.MVCArray<google.maps.LatLng>|Array<google.maps.LatLng>} path
-	 */
-	google.maps.Polyline.prototype.setPath = function(path) {
-		this.set("path", path);
-	};
-
-	/**
-	 * Sets visibility of polyline
-	 * @param {Boolean} visible
-	 */
-	google.maps.Polyline.prototype.setVisible = function(visible) {
-		this.set("visible", visible);
-	};
-
-	/**
-	 * Converts MVCArray to array of coordinates
-	 * @param {google.maps.MVCArray<google.maps.LatLng>} input
-	 * @return {Array<nokia.maps.geo.Coordinate>}
-	 * @private
-	 */
-	google.maps.Polyline.prototype._latLngMVCArrayToCoordsArray = function(input) {
-		var a = [],
-			i,
-			len = input.getLength();
-
-		for (i = 0; i < len; i++) {
-			a.push(input.get(i).coordinate);
-		}
-		return a;
-	};
-
-	/**
-	 * Emits all mouse events, this event is "PolyMouseEvent" which extends MouseEvent and has
-	 * edge, vertex, path properties
-	 * @param {Event} event
-	 */
-	google.maps.Polyline.prototype._domEventsListener = function(event) {
-		var polyEvent,
-			nearestPoint;
-		if (this.clickable) {
-			polyEvent = google.maps.event._createCustomDomEvent(event);
-
-			nearestPoint = this.polyline.getNearestIndex(polyEvent.latLng.coordinate);
-			polyEvent.edge = nearestPoint == this.polyline.path.getLength() ? nearestPoint - 1 : nearestPoint;
-			polyEvent.path = 0; //todo: seems that polylines can be made from more than one path, we now support only one path
-
-			//if vertex and this.editable == true
-			//polyEvent.vertex = number;
-
-			google.maps.event.trigger(this, event.type, polyEvent);
-		}
-	};
-}())/**
- * gMap projection is weird because it is returning point from 0,0 to 256, 256 so for zoomLevel 0.
- * Problem is also that it returns weird numbers for latitude +-90
- */
-google.maps.Projection = {
-	/**
-	 *
-	 * @param {google.maps.LatLng} latLng
-	 * @param {google.maps.Point} [point]
-	 */
-	fromLatLngToPoint: function(latLng, point) {},
-	/**
-	 *
-	 * @param {google.maps.Point} pixel
-	 * @param {Boolean} [nowrap]
-	 */
-    fromPointToLatLng: function(pixel, nowrap) {}
-};/**
- * Size class
- * @param {Number} width
- * @param {Number} height
- * @param {String} [widthUnit]
- * @param {String} [heightUnit]
- * @constructor
- */
-google.maps.Size = function(width, height, widthUnit, heightUnit) {
-	this.width = width;
-	this.height = height;
-	this.widthUnit = widthUnit;
-	this.heightUnit = heightUnit;
-};
-
-/**
- * Compare two Sizes
- * @param {google.maps.Size} other
- * @return {Boolean}
- */
-google.maps.Size.prototype.equals = function(other) {
-	return this.width == other.width && this.height == other.height;
-};
-
-/**
- * @return {String}
- */
-google.maps.Size.prototype.toString = function() {
-	return google.maps._toString(this.width, this.height);
-};
-// not rewrite main namespace
-window.google = window.google || {};
-// rewrite maps namespace with our own
-window.google.maps = {
-	/**
-	 * Basic method which serializes arguments to string (arg1, arg2,..., argN)
-	 * @return {String}
-	 */
-	_toString: function() {
-		return "(" + Array.prototype.slice.call(arguments).join(", ") + ")";
-	},
-
-	/**
-	 * Function which can compute MOD for negative numbers,
-	 * {@link http://www.yourdailygeekery.com/2011/06/28/modulo-of-negative-numbers.html}
-	 *
-	 * @param {Number} a
-	 * @param {Number} b
-	 * @return {Number}
-	 */
-	_modulo: function (a, b) {
-		return ((a % b) + b) % b;
-	},
-
-	/**
-	 * Subclassing of super class
-	 * @param {Function} sup
-	 * @param {Object} sub
-	 */
-	_subClass: function(sup, sub){
-		sub.prototype = new sup();
-		sub.prototype.super = sub.prototype.constructor;
-		sub.prototype.constructor = sub;
-		return sub;
-	}
-};
-
-(function(ns) {
-	var registerDomEvents = [],
-		registerInstanceEvents = [],
-		event = ns.event = {};
-
-//nokia.maps.dom.Event.prototype.stop = nokia.maps.dom.Event.prototype.stopPropagation;
-
-/**
- * Attach DOM event handler
- * @param instance
- * @param eventName
- * @param handler
- * @param capture
- */
-event.addDomListener = function(instance, eventName, handler, capture){
-	var mapsViewListener = event._createDomMapsViewListenerObject(instance, eventName, handler, capture);
-
-	event._addDomListener(mapsViewListener);
-	return mapsViewListener;
-};
-
-/**
- * Attach DOM event handler which is called only once
- * @param instance
- * @param eventName
- * @param handler
- * @param capture
- */
-event.addDomListenerOnce = function(instance, eventName, handler, capture) {
-	var mapsViewListener = event._createDomMapsViewListenerObject(instance, eventName, handler, capture),
-		onceFunc = function() {
-			handler.apply(null, arguments);
-
-			event.removeListener(mapsViewListener);
-		};
-
-	mapsViewListener.handler = onceFunc;
-	event._addDomListener(mapsViewListener);
-	return mapsViewListener;
-};
-
-/**
- * Creates MapsEventListener object for DOM listeners
- * @param instance
- * @param eventName
- * @param handler
- * @param capture
- * @return {google.maps.event.MapsEventListener}
- */
-event._createDomMapsViewListenerObject = function(instance, eventName, handler, capture) {
-	return {instance: instance, eventName: eventName, handler: handler, capture: capture};
-};
-
-/**
- * Private method which attach DOM listeners
- * @param {google.maps.event.MapsEventListener} listener
- */
-event._addDomListener = function(listener) {
-	var instance = nokia.maps.dom.EventTarget(instance);
-	instance.addListener(listener.eventName, listener.handler, listener.capture);
-
-	registerDomEvents.push(listener);
-};
-
-/**
- * Attach object event handler
- * @param instance
- * @param eventName
- * @param handler
- */
-event.addListener = function(instance, eventName, handler) {
-	var mapsViewListener = event._createInstanceMapsViewListenerObject(instance, eventName, handler);
-
-	event._addInstanceListener(mapsViewListener);
-	return mapsViewListener;
-};
-
-/**
- * Attach object event handler which is called only once
- * @param instance
- * @param eventName
- * @param handler
- */
-event.addListenerOnce = function(instance, eventName, handler) {
-	var mapsViewListener = event._createDomMapsViewListenerObject(instance, eventName, handler),
-		onceFunc = function() {
-			handler.apply(null, arguments);
-
-			event.removeListener(mapsViewListener);
-		};
-
-	mapsViewListener.handler = onceFunc;
-	event._addInstanceListener(mapsViewListener);
-	return mapsViewListener;
-};
-
-/**
- * Creates MapsEventListener object for DOM listeners
- * @param instance
- * @param eventName
- * @param handler
- * @return {google.maps.event.MapsEventListener}
- */
-event._createInstanceMapsViewListenerObject = function(instance, eventName, handler) {
-	return {instance: instance, eventName: eventName, handler: handler};
-};
-
-/**
- * Private method which attach DOM listeners
- * @param {google.maps.event.MapsEventListener} listener
- */
-event._addInstanceListener = function(listener) {
-	var instance = nokia.maps.dom.EventTarget(instance);
-	instance.addListener(listener.eventName, listener.handler);
-
-	registerInstanceEvents.push(listener);
-};
-
-/**
- * Remove all event handlers from given DOM/object instance
- * @param instance
- */
-event.clearInstanceListeners = function(instance) {
-	var length = registerDomEvents.length;
-	while(length--) {
-		if (registerDomEvents[length].instance == instance) {
-			registerDomEvents.splice(length, 1);
-		}
-	}
-
-	length = registerInstanceEvents.length;
-	while(length--) {
-		if (registerInstanceEvents[length].instance == instance) {
-			registerInstanceEvents.splice(length, 1);
-		}
-	}
-};
-
-/**
- * Remove all listeners from DOM/object instance which listen on particular event name
- * @param instance
- * @param eventName
- */
-event.clearListeners = function(instance, eventName) {
-	var length = registerDomEvents.length;
-
-	while(length--) {
-		if (registerDomEvents[length].instance == instance && registerDomEvents[length].eventName == eventName) {
-			registerDomEvents.splice(length, 1);
-		}
-	}
-
-	length = registerInstanceEvents.length;
-
-	while(length--) {
-		if (registerInstanceEvents[length].instance == instance && registerInstanceEvents[length].eventName == eventName) {
-			registerInstanceEvents.splice(length, 1);
-		}
-	}
-};
-
-/**
- * Remove listener by listener reference
- * @param {google.maps.event.MapsEventListener} listener
- */
-event.removeListener = function(listener) {
-	var length = registerDomEvents.length;
-
-	while(length--) {
-		if (registerDomEvents[length] == listener) {
-			registerDomEvents.splice(length, 1);
-			return;
-		}
-	}
-
-	length = registerInstanceEvents.length;
-
-	while(length--) {
-		if (registerInstanceEvents[length] == listener) {
-			registerInstanceEvents.splice(length, 1);
-			return;
-		}
-	}
-};
-
-/**
- * Trigger event on instance with given event name and optional arguments
- * @param instance
- * @param eventName
- */
-event.trigger = function(instance, eventName) {
-	var length = registerDomEvents.length,
-		event;
-
-	while(length--) {
-		event = registerDomEvents[length];
-		if (event.instance == instance && event.eventName == eventName) {
-			event.handler.apply(null, Array.prototype.slice.call(arguments).splice(2));
-		}
-	}
-
-	length = registerInstanceEvents.length;
-
-	while(length--) {
-		event = registerInstanceEvents[length];
-		if (event.instance == instance && event.eventName == eventName) {
-			event.handler.apply(null, Array.prototype.slice.call(arguments).splice(2));
-		}
-	}
-};
-
-/**
- * Prepare custom event {see: google.maps.MouseEvent}
- * @param {Event} event
- * @return {google.maps.MouseEvent}
- * @private
- */
-event._createCustomDomEvent = function(event) {
-	var x = event.displayX || event.clientX,
-		y = event.displayY || event.clientY,
-		customEvent = {
-			event: event,
-			stop: function() {event.stopPropagation()},
-		    latLng: (x !== undefined && y !== undefined) && google.maps.LatLng.fromCoordinate(event.display.pixelToGeo(x, y)),
-			pixel: new google.maps.Point(event.displayX, event.displayY)
-		};
-
-	return customEvent;
-};
-
-
-}(google.maps));
-
-/*
-	addDomListener(instance:Object, eventName:string, handler:Function, capture?:boolean)	MapsEventListener	Cross browser event handler registration. This listener is removed by calling removeListener(handle) for the handle that is returned by this function.
-	addDomListenerOnce(instance:Object, eventName:string, handler:Function, capture?:boolean)	MapsEventListener	Wrapper around addDomListener that removes the listener after the first event.
-	addListener(instance:Object, eventName:string, handler:Function)	MapsEventListener	Adds the given listener function to the given event name for the given object instance. Returns an identifier for this listener that can be used with removeListener().
-	addListenerOnce(instance:Object, eventName:string, handler:Function)	MapsEventListener	Like addListener, but the handler removes itself after handling the first event.
-	clearInstanceListeners(instance:Object)	None	Removes all listeners for all events for the given instance.
-	clearListeners(instance:Object, eventName:string)	None	Removes all listeners for the given event for the given instance.
-	removeListener(listener:MapsEventListener)	None	Removes the given listener, which should have been returned by addListener above.
-	trigger(instance:Object, eventName:string, var_args:*)	None	Triggers the given event. All arguments after eventName are passed as arguments to the listeners.
 */
