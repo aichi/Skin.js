@@ -22,9 +22,12 @@ cat "$SRC_DIR"base.js \
 	"$SRC_DIR"LatLng.js \
 	"$SRC_DIR"LatLngBounds.js \
 	"$SRC_DIR"Point.js \
+	"$SRC_DIR"Size.js \
 	"$SRC_DIR"MapTypeId.js \
 	"$SRC_DIR"MVCObject.js \
+	"$SRC_DIR"MVCArray.js \
 	"$SRC_DIR"Marker.js \
 	"$SRC_DIR"Geocoder.js \
+	"$SRC_DIR"InfoWindow.js \
 	"$SRC_DIR"Map.js \
 > $OUT_PATH

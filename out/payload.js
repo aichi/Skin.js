@@ -546,7 +546,37 @@ google.maps.Point.fromPoint = function(point) {
  */
 google.maps.Point.toPoint = function(point) {
 	return new nokia.maps.util.Point(point.x, point.y);
+};/**
+ * Size class
+ * @param {Number} width
+ * @param {Number} height
+ * @param {String} [widthUnit]
+ * @param {String} [heightUnit]
+ * @constructor
+ */
+google.maps.Size = function(width, height, widthUnit, heightUnit) {
+	this.width = width;
+	this.height = height;
+	this.widthUnit = widthUnit;
+	this.heightUnit = heightUnit;
 };
+
+/**
+ * Compare two Sizes
+ * @param {google.maps.Size} other
+ * @return {Boolean}
+ */
+google.maps.Size.prototype.equals = function(other) {
+	return this.width == other.width && this.height == other.height;
+};
+
+/**
+ * @return {String}
+ */
+google.maps.Size.prototype.toString = function() {
+	return google.maps._toString(this.width, this.height);
+};
+
 google.maps.MapTypeId = {
 	HYBRID: "hybrid",
 	ROADMAP: "roadmap",
@@ -868,7 +898,112 @@ was set.
 
 /**
  nokia.maps.util.OObject sets first than observers are triggered with new and old value (sync).
- */(function(){
+ *//**
+ * MVCArray is observable mutable array and is made by nokia.maps.util.OList
+ * @constructor
+ * @param {Variant[]} array
+ */
+
+google.maps.MVCArray = function(array) {
+	//nokia.maps.util.OList.removeAt method is same like in MVCArray but there is event triggered
+	this._removeAtOriginal = this.removeAt;
+
+	this.addAll(array);
+};
+
+google.maps._subClass(nokia.maps.util.OList, google.maps.MVCArray);
+
+
+/**
+ * Removes last item from array
+ */
+google.maps.MVCArray.prototype.pop = function() {
+	this.removeAt(this.getLength() - 1);
+};
+
+/**
+ * Push one element to the end of array
+ * @param {Variant} elem
+ * @return {Number}
+ */
+google.maps.MVCArray.prototype.push = function(elem) {
+	this.set(elem, this.getLength() - 1);
+	return this.getLength();
+};
+
+/**
+ * Sets element on specific index, if index is out of bounds than array is extended
+ * @param {Number} i
+ * @param {Variant} elem
+ */
+google.maps.MVCArray.prototype.setAt = function(i, elem) {
+	var length = this.getLength(),
+		j;
+	//extend array out of range
+	if (length < i) {
+		for (j = length; j < i; j++) {
+			this.add(undefined, j);
+		}
+	}
+	this.add(elem, i);
+
+	google.maps.event.trigger(this, "set_at", i, elem);
+};
+
+/**
+ * Replace element on specific index
+ * @param {Number} i
+ * @param {Variant} elem
+ */
+google.maps.MVCArray.prototype.insertAt = function(i, elem) {
+	this.add(elem, i);
+	google.maps.event.trigger(this, "insert_at", i);
+};
+
+/**
+ * Returns content of MVCArray as array
+ * @return {Variant[]}
+ */
+google.maps.MVCArray.prototype.getArray = function() {
+	return this.asArray();
+};
+
+/**
+ * Returns object by index
+ * @param {Number} i
+ * @return {Variant}
+ */
+google.maps.MVCArray.prototype.getAt = function(i) {
+	return this.get(i);
+};
+
+/**
+ * Executes callback on all elements
+ * @param {Function(Variant, Number)} callback
+ */
+google.maps.MVCArray.prototype.forEach = function(callback) {
+	var length = this.getLength(),
+		i;
+
+	for (i = 0; i < length; i++) {
+		callback(this.get(i), i);
+	}
+};
+
+google.maps.MVCArray.prototype.removeAt = function(i) {
+	var elm = this.get(i);
+	this._removeAtOriginal(i);
+	google.maps.event.trigger(this, "remove_at", i, elm);
+};
+
+/**
+ * Methods which are same in both APIs:
+ * clear()
+ * removeAt()
+ * getLength()
+ *
+ */
+(function(){
 	//trick to get reference to icon of StandardMarker which can be used if user don't specify its own icon
 	var _marker = new nokia.maps.map.Marker(new nokia.maps.geo.Coordinate(0,0)),
 		icon = _marker.icon,
@@ -880,10 +1015,12 @@ was set.
 			opt = {icon: icon},
 			x = anchor.x,
 			y = anchor.y;
+		
 		this.marker = nokia.maps.dom.EventTarget(new nokia.maps.map.Marker(coord, opt));
 		this.map; //to which marker belongs to
 		this.origin = new google.maps.Point(0, 0); //default value
 		this.clickable; //if marker catch mouse/touch events. Default = true;
+		this._iconImage;//store for Image object which has always with and height
 
 		//set DOM Event listeners
 		this._domEventsListener = this._domEventsListener.bind(this);
@@ -924,16 +1061,24 @@ was set.
 							value.origin ? value.origin.height : UNDEF);
 						value.origin && (obj.origin = value.origin);
 						//todo: scaling is not supported in 2.2.3 version
-						//todo: implement value.anchor, by default is bottom, middle
+						obj._iconImage = icon;
 					} else if (value.path) { //google.maps.Symbol
 						//todo: support  Symbol
 					} else {
-						icon = value;
+						icon = new nokia.maps.gfx.BitmapImage(
+							value,
+							document
+						);
+						obj._iconImage = icon;
 					}
-					obj.marker.set("icon", icon);
+					obj._iconImage.prepare(function(){
+						obj.marker.set("anchor", new nokia.maps.util.Point(this._iconImage.width/2, this._iconImage.height));
+						obj.marker.set("icon", obj._iconImage);
+					}, obj);
+					
 					break;
 				case "anchorPoint":
-					obj.marker.set("anchor", new nokia.maps.util.Point(value.x, value.y));
+					//obj.marker.set("anchor", new nokia.maps.util.Point(value.x, value.y));
 					break;
 				case "shape":
 					obj.marker.set("hitArea", obj._prepareHitArea(value));
@@ -1299,7 +1444,183 @@ address	string	Address. Optional.
 bounds	LatLngBounds	LatLngBounds within which to search. Optional.
 location	LatLng	LatLng about which to search. Optional.
 region	string	Country code used to bias the search, specified as a Unicode region subtag / CLDR identifier. Optional.
-*//**
+*/(function(){
+	var UNDEF;
+
+	google.maps.InfoWindow = function(opts) {
+		this.infoBubbles; //info bubbles manager
+		this.bubble; //currently visible bubble;
+		this.map; //to which marker belongs to
+
+		// Because Marker is MVCObject properties observer should be set, see Map.
+		this.addObserver("*", function(obj, key, value, oldValue) {
+			switch (key) {
+				case "content":
+					break;
+				case "position":
+					break;
+				case "disableAutoPan":
+				case "maxWidth":
+				case "pixelOffset":
+				case "zIndex":
+					//do nothing
+					break;
+				case "map":
+					if (obj.map) {
+						//remove info bubble
+						obj.infoBubbles = null;
+						obj.bubble && obj.bubble.close();
+						obj.bubble = null;
+					}
+
+					if (value) {
+						obj.map = value;
+						//initialize manager, bubble is shown only after open() call
+						obj.infoBubbles = value.map.getComponentById("InfoBubbles");
+						//because gMap does not support bubble alignment and is always shown up right than:
+						obj.infoBubbles.options.set("defaultXAligment", obj.infoBubbles.ALIGMENT_RIGHT);
+						obj.infoBubbles.options.set("defaultYAligment", obj.infoBubbles.ALIGMENT_ABOVE);
+						obj.bubble = obj.infoBubbles.initBubble(function(){
+							//this is onUserClose handler
+							google.maps.event.trigger(obj, "closeclick");
+						});
+					}
+					break;
+			}
+		});
+
+		this.setOptions(opts);
+		this.disableAutoPan == UNDEF && this.set("disableAutoPan", false);
+	};
+
+	google.maps._subClass(google.maps.MVCObject, google.maps.InfoWindow);
+
+	/**
+	 * Closes Infowindow
+	 */
+	google.maps.InfoWindow.prototype.close = function() {
+		this.bubble.close();
+	};
+
+	/**
+	 * Returns content of InfoWindow
+	 * @returns {String|HTMLElement}
+	 */
+	google.maps.InfoWindow.prototype.getContent = function() {
+		return this.content;
+	};
+
+	/**
+	 * Returns the position of InfoBubble
+	 * @return {google.maps.LatLng}
+	 */
+	google.maps.InfoWindow.prototype.getPosition = function() {
+		return this.position;
+	};
+
+	/**
+	 * @return {Number}
+	 */
+	google.maps.InfoWindow.prototype.getZIndex = function()	{
+		return 0;
+	};
+
+	/**
+	 * 	Opens InfoWindow on the given map and optionally anchored to given MVCObject - Marker.
+	 * 	@param {google.maps.Map} [map]
+	 * 	@param {google.maps.MVCObject} [anchor]
+	 */
+	google.maps.InfoWindow.prototype.open = function(map, anchor) {
+		if (map) {
+			this.set("map", map);
+		}
+
+		if (anchor) {
+			this.set("position", anchor.position);
+			if (anchor.anchorPoint) {
+				this.set("anchorPoint", anchor.anchorPoint);
+			}
+		}
+		
+		if (this.bubble) {
+			this.bubble.update(this.content, this.position.coordinate);
+			this.bubble.open();
+			
+			if (!this.disableAutoPan) {
+				this._autoPan();
+			}
+			
+			//emits "domready" event when content DIV is attached to DOM (it is when bubble is opened)
+			google.maps.event.trigger(this, "domready");
+		}
+	};
+	
+	/**
+	 * Automatically pans the map when bubble didn't fit into display.
+	 */
+	google.maps.InfoWindow.prototype._autoPan = function() {
+		var map = this.map.map,
+			bubble = this.bubble,
+			infoBubbles = this.infoBubbles,
+			mapWidth = map.width,
+			mapHeight = map.height,
+			bubbleWidth = bubble.node.clientWidth + 50,
+			bubbleHeight = bubble.node.clientHeight + 50,
+			bubblePosition = map.geoToPixel(this.position.coordinate),
+			panX = 0,
+			panY = 0;
+	
+		if (bubble.xAlignment == infoBubbles.ALIGNMENT_RIGHT) {
+			panX = Math.min(0, mapWidth - bubblePosition.x - bubbleWidth);
+		} else {
+			panX = - Math.min(0, bubblePosition.x - bubbleWidth);
+		}
+		
+		if (bubble.xAlignment == infoBubbles.ALIGNMENT_BELOW) {
+			panY = Math.min(0, mapHeight - bubblePosition.y - bubbleHeight);
+		} else {
+			panY = - Math.min(0, bubblePosition.y - bubbleHeight);
+		}
+		
+		if (panX || panY) {
+			map.pan(panX, panY, 0, 0, "default");
+		}
+	};
+
+	/**
+	 * Sets the InfoWindow content
+	 * @param {String | HTMLElement} content
+	 */
+	google.maps.InfoWindow.prototype.setContent = function(content)	{
+		this.set("content", content);
+	};
+
+	/**
+	 * Sets options
+	 * @param {google.maps.InfoWindowOptions} options
+	 */
+	google.maps.InfoWindow.prototype.setOptions = function(options)	{
+		//populate own properties
+		this.setValues(options);
+	};
+
+	/**
+	 * Sets the position of InfoWindow - tail end point
+	 * @param {google.maps.LatLng} position
+	 */
+	google.maps.InfoWindow.prototype.setPosition = function(position) {
+		this.set("position", position);
+	};
+
+	/**
+	 * Sets the zIndex
+	 * @todo this is useless in 2.2.3 of Nokia API is not possible to change zIndex of InfoBubbles
+	 * @param {Number} zIndex
+	 */
+	google.maps.InfoWindow.prototype.setZIndex = function(zIndex) {
+		this.set("zIndex", zIndex);
+	};
+}());/**
  * Main map class
  * @constructs
  * @param {HTMLElement} mapDiv
@@ -1562,7 +1883,7 @@ google.maps.Map.prototype.setMapTypeId = function(mapTypeId) {
 google.maps.Map.prototype.setOptions = function(options) {};
 
 /**
- * TODO to be investigated
+ * TODO: when Nokia API with Panorama comes that this can be implemented
  * @param {google.maps.StreetViewPanorama} panorama
  */
 google.maps.Map.prototype.setStreetView = function(panorama) {};
