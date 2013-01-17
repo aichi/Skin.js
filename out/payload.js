@@ -340,6 +340,15 @@ google.maps.LatLng.prototype.toUrlValue = function(precision) {
  */
 google.maps.LatLng.fromCoordinate = function(coordinate) {
 	return new google.maps.LatLng(coordinate.latitude, coordinate.longitude)
+};
+
+/**
+ * Static method which returns Nokia Coordiante from given LatLng.
+ * @param {google.maps.LatLng} latLng
+ * @return {nokia.maps.geo.Coordinate} 
+ */
+google.maps.LatLng.toCoordinate = function(latLng) {
+	return latLng.coordinate ? latLng.coordinate : new nokia.maps.geo.Coordinate(latLng.lat(), latLng.lng());
 };/**
  * Bounding box defined by two coordinates SouthWest and NorthEast
  * @constructs
@@ -373,7 +382,7 @@ google.maps.LatLngBounds = function(sw, ne) {
  * @return {Boolean}
  */
 google.maps.LatLngBounds.prototype.contains = function(latLng) {
-	return this.boundingBox.contains(latLng.coordinate);
+	return this.boundingBox.contains(google.maps.LatLng.toCoordinate(latLng));
 };
 
 /**
@@ -1011,7 +1020,7 @@ google.maps.MVCArray.prototype.removeAt = function(i) {
 		UNDEF = undefined;
 
 	google.maps.Marker = function(opts) {
-		var coord = opts.position.coordinate,
+		var coord = google.maps.LatLng.toCoordinate(opts.position),
 			opt = {icon: icon},
 			x = anchor.x,
 			y = anchor.y;
@@ -1039,7 +1048,7 @@ google.maps.MVCArray.prototype.removeAt = function(i) {
 		this.addObserver("*", function(obj, key, value, oldValue) {
 			switch (key) {
 				case "position":
-					obj.marker.set("coordinate", value.coordinate);
+					obj.marker.set("coordinate", google.maps.LatLng.toCoordinate(value));
 					break;
 				case "draggable":
 				case "zIndex":
@@ -1543,7 +1552,7 @@ region	string	Country code used to bias the search, specified as a Unicode regio
 		}
 		
 		if (this.bubble) {
-			this.bubble.update(this.content, this.position.coordinate);
+			this.bubble.update(this.content, google.maps.LatLng.toCoordinate(this.position));
 			this.bubble.open();
 			
 			if (!this.disableAutoPan) {
@@ -1566,7 +1575,7 @@ region	string	Country code used to bias the search, specified as a Unicode regio
 			mapHeight = map.height,
 			bubbleWidth = bubble.node.clientWidth + 50,
 			bubbleHeight = bubble.node.clientHeight + 50,
-			bubblePosition = map.geoToPixel(this.position.coordinate),
+			bubblePosition = map.geoToPixel(google.maps.LatLng.toCoordinate(this.position)),
 			panX = 0,
 			panY = 0;
 	
@@ -1633,7 +1642,7 @@ google.maps.Map = function(mapDiv, opts) {
 
 	//todo translate MapOptions to nokia opt
 	//required
-	options.center = opts.center ? opts.center.coordinate : new nokia.maps.geo.Coordinate(0,0);
+	options.center = opts.center ? google.maps.LatLng.toCoordinate(opts.center) : new nokia.maps.geo.Coordinate(0,0);
 	options.baseMapType = google.maps.MapTypeId.constantToBaseMapType(opts.mapTypeId);
 	options.zoomLevel = opts.zoom;
 	//optional
@@ -1721,7 +1730,7 @@ styles	Array.<MapTypeStyle>	Styles to apply to each of the default map types. No
 	this.addObserver("*", function(obj, key, value, oldValue) {
 		switch (key) {
 			case "center":
-				obj.map.set("center", value.coordinate);
+				obj.map.set("center", google.maps.LatLng.toCoordinate(value));
 				break;
 			case "zoom":
 				obj.map.set("zoomLevel", value);
@@ -1841,7 +1850,7 @@ google.maps.Map.prototype.panBy = function(x, y) {
  * @param {google.maps.LatLng} latLng
  */
 google.maps.Map.prototype.panTo = function(latLng) {
-	this.map.setCenter(latLng.coordinate, "default");
+	this.map.setCenter(google.maps.LatLng.toCoordinate(latLng), "default");
 };
 
 /**
@@ -1850,14 +1859,14 @@ google.maps.Map.prototype.panTo = function(latLng) {
  */
 google.maps.Map.prototype.panToBounds = function(latLngBounds) {
 	//todo if bounds are bigger than viewport show NW corner!
-	this.map.setCenter(latLngBounds.getCenter().coordinate, "default");
+	this.map.setCenter(google.maps.LatLng.toCoordinate(latLngBounds.getCenter()), "default");
 };
 
 /**
  * @param {google.maps.LatLng} latlng
  */
 google.maps.Map.prototype.setCenter = function(latLng) {
-	this.map.setCenter(latLng.coordinate);
+	this.map.setCenter(google.maps.LatLng.toCoordinate(latLng));
 };
 
 /**
